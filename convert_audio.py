@@ -2,10 +2,10 @@ import os
 import subprocess
 import glob
 from tqdm import tqdm
-from translations import get_translator
+from src.utils.translations import get_translator
 import signal
 import sys
-from smooth_progress import SmoothProgress
+from src.utils.progress import SmoothProgress
 
 SUPPORTED_FORMATS = {
     '1': {'name': 'MP3', 'ext': '.mp3', 'ffmpeg_codec': 'libmp3lame'},

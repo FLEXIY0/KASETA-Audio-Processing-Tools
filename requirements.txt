@@ -1,3 +1,4 @@
 pydub==0.25.1
 tqdm==4.66.1 
 googletrans==3.1.0a0
+PyQt6==6.6.1

@@ -3,10 +3,10 @@ import subprocess
 from pydub import AudioSegment
 import glob
 from tqdm import tqdm
-from translations import get_translator
+from other.translations import get_translator
 import signal
 import sys
-from smooth_progress import SmoothProgress
+from other.smooth_progress import SmoothProgress
 
 def signal_handler(sig, frame):
     print('\nПрограмма прервана пользователем.')
