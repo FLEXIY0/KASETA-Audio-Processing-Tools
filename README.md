@@ -1,26 +1,51 @@
 # Audio Processing Tools
 
-A collection of tools for audio processing and conversion.
+Графическое приложение для работы с аудио файлами, написанное на Python с использованием PyQt5.
 
-## Installation
+## Возможности
 
-1. Make sure you have Python 3.6+ installed
-2. Run the installation script:
-   ```
-   python scripts/install_requirements.py
-   ```
+- Конвертация аудио файлов в различные форматы (MP3, WAV, OGG, FLAC, AAC)
+- Объединение нескольких аудио файлов в один с настройкой пауз и затухания
+- Поддержка множественного выбора файлов
+- Визуальный прогресс выполнения операций
+- Анимация успешного завершения операций
 
-## Available Scripts
+## Требования
 
-- `convert_audio.py` - Convert audio files between different formats
-- `merge_music.py` - Merge multiple audio files
+- Python 3.6 или новее
+- FFmpeg (должен быть установлен в системе)
+- Зависимости из requirements.txt
 
-## Requirements
+## Установка
 
-- Python 3.6+
-- FFmpeg
-- Python packages (installed automatically):
-  - See requirements.txt for the full list
+1. Клонируйте репозиторий
+2. Создайте виртуальное окружение: `python -m venv venv`
+3. Активируйте окружение:
+   - Windows: `venv\Scripts\activate`
+   - Linux/Mac: `source venv/bin/activate`
+4. Установите зависимости: `pip install -r requirements.txt`
+5. Установите FFmpeg для вашей системы
+
+## Запуск
+
+```bash
+python scripts/run_gui.py
+```
+
+## Структура проекта
+
+```
+├── scripts/
+│   └── run_gui.py          # Главный скрипт запуска
+├── src/
+│   ├── core/              # Ядро приложения
+│   ├── gui/               # GUI компоненты
+│   └── utils/             # Утилиты
+├── music/                 # Директория для музыки
+│   ├── input/            # Входные файлы
+│   └── output/           # Выходные файлы
+└── requirements.txt       # Зависимости проекта
+```
 
 ## License
 
