@@ -1,4 +1,10 @@
 # KASETA - Audio Processing Tools
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/7c0bd2ba-7f10-4af9-bce7-d55ad94279c2" alt="KASETA Logo" width="400">
+</p>
+
+
+
 
 <p align="center">
   <a href="https://github.com/FLEXIY0/Lotus-Smart-Markdown-Editor-for-Android/stargazers"><img src="https://img.shields.io/github/stars/FLEXIY0/Lotus-Smart-Markdown-Editor-for-Android?style=for-the-badge&logo=github&color=gold" alt="GitHub stars"></a>
@@ -9,9 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"></a>
 </p>
 
-<p align="center">
-  <img src="assets/Group 15.png" alt="KASETA Logo" width="400">
-</p>
+
 
 ## English | [Русский](#русский)
 
