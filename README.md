@@ -62,6 +62,7 @@ KASETA is a powerful desktop application for audio file processing, developed wi
 2. Download or clone this repository
 3. Make the launch script executable:
    ```bash
+   sed -i 's/\r$//' run.sh
    chmod +x run.sh
    ```
 4. Run the application:
@@ -190,6 +191,7 @@ KASETA - мощное настольное приложение для обра�
 2. Скачайте или клонируйте этот репозиторий
 3. Сделайте скрипт запуска исполняемым:
    ```bash
+   sed -i 's/\r$//' run.sh
    chmod +x run.sh
    ```
 4. Запустите приложение:
