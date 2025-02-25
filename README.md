@@ -141,7 +141,7 @@ KASETA is a powerful desktop application for audio file processing, developed wi
 # <a name="русский"></a>KASETA - Инструменты обработки аудио
 
 <p align="center">
-  <img src="assets/Group 15.png" alt="KASETA Logo" width="400">
+  <img src="https://github.com/user-attachments/assets/7c0bd2ba-7f10-4af9-bce7-d55ad94279c2" alt="KASETA Logo" width="400">
 </p>
 
 ## [English](#kaseta---audio-processing-tools) | Русский
