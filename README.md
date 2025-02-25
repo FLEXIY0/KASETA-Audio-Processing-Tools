@@ -11,9 +11,8 @@
   <a href="https://discord.com/users/1170835455755964469"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://x.com/FLEXIY0"><img src="https://img.shields.io/badge/Twitter-Follow-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" alt="Twitter Follow"></a>
   <a href="https://www.donationalerts.com/r/nedoedal"><img src="https://img.shields.io/badge/Donate-Support_Project-ED1C24?style=for-the-badge&logo=heart&logoColor=white" alt="Donate"></a>
-  <a href="https://github.com/FLEXIY0/Lotus-Smart-Markdown-Editor-for-Android/releases"><img src="https://img.shields.io/badge/Release-Latest-2ea44f?style=for-the-badge&logo=github" alt="Latest Release"></a>
+  <a href="https://github.com/FLEXIY0/KASETA-Audio-Processing-Tools/releases/tag/v1.0"><img src="https://img.shields.io/badge/Release-Latest-2ea44f?style=for-the-badge&logo=github" alt="Latest Release"></a>
 </p>
-
 
 
 ## English | [Русский](#русский)
