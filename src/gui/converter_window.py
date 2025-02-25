@@ -5,8 +5,9 @@ import traceback
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                            QHBoxLayout, QLabel, QPushButton, QComboBox, 
                            QFileDialog, QProgressBar, QMessageBox, QListWidget,
-                           QListWidgetItem)
+                           QListWidgetItem, QFrame)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QIcon
 
 # Добавляем корневую директорию проекта в путь поиска модулей
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
@@ -16,6 +17,7 @@ from src.core.audio_processor import AudioProcessor
 from src.utils.translations import get_translator
 from src.utils.paths import MUSIC_INPUT_DIR, MUSIC_OUTPUT_DIR, ensure_dirs_exist
 from src.gui.confetti import ConfettiWidget
+from src.utils.settings import load_settings
 
 SUPPORTED_FORMATS = {
     'MP3': {'ext': '.mp3', 'ffmpeg_codec': 'libmp3lame'},
@@ -30,11 +32,12 @@ class ConversionWorker(QThread):
     finished = pyqtSignal(bool, str)
     status = pyqtSignal(str)
 
-    def __init__(self, input_files, output_format):
+    def __init__(self, input_files, output_format, translate_func):
         super().__init__()
         self.input_files = input_files
         self.output_format = output_format
         self.processor = AudioProcessor(lambda x: x)
+        self.translate = translate_func
 
     def run(self):
         try:
@@ -42,13 +45,13 @@ class ConversionWorker(QThread):
             for i, input_file in enumerate(self.input_files, 1):
                 # Проверяем существование входного файла
                 if not os.path.exists(input_file):
-                    raise FileNotFoundError(f"Входной файл не найден: {input_file}")
+                    raise FileNotFoundError(self.translate('common.file_not_found', input_file))
 
                 # Проверяем доступ к директории вывода
                 if not os.path.exists(MUSIC_OUTPUT_DIR):
                     os.makedirs(MUSIC_OUTPUT_DIR)
                 elif not os.access(MUSIC_OUTPUT_DIR, os.W_OK):
-                    raise PermissionError(f"Нет прав на запись в директорию: {MUSIC_OUTPUT_DIR}")
+                    raise PermissionError(self.translate('converter_window.dialog.no_write_permissions', MUSIC_OUTPUT_DIR))
 
                 output_file = os.path.join(
                     MUSIC_OUTPUT_DIR,
@@ -56,7 +59,7 @@ class ConversionWorker(QThread):
                     SUPPORTED_FORMATS[self.output_format]['ext']
                 )
                 
-                self.status.emit(f"Конвертация {os.path.basename(input_file)} ({i}/{total_files})...")
+                self.status.emit(self.translate('converter_window.dialog.converting_file', i, total_files, os.path.basename(input_file)))
                 self.progress.emit(i-1, total_files)
                 
                 success, error = self.processor.convert_audio(
@@ -66,28 +69,41 @@ class ConversionWorker(QThread):
                 )
                 
                 if not success:
-                    self.finished.emit(False, f"Ошибка при конвертации {os.path.basename(input_file)}:\n{error}")
+                    self.finished.emit(False, f"{self.translate('converter_window.dialog.error_conversion_file', os.path.basename(input_file))}\n{error}")
                     return
 
             self.progress.emit(total_files, total_files)
             self.finished.emit(True, "")
                 
         except FileNotFoundError as e:
-            error_msg = f"Ошибка: {str(e)}"
+            error_msg = f"{self.translate('common.error')}: {str(e)}"
             self.status.emit(error_msg)
             self.finished.emit(False, error_msg)
         except PermissionError as e:
-            error_msg = f"Ошибка прав доступа: {str(e)}"
+            error_msg = f"{self.translate('converter_window.dialog.permission_error')}: {str(e)}"
             self.status.emit(error_msg)
             self.finished.emit(False, error_msg)
         except Exception as e:
-            error_msg = f"Неожиданная ошибка: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"{self.translate('common.error_unexpected', str(e))}\n{traceback.format_exc()}"
             self.status.emit(error_msg)
             self.finished.emit(False, error_msg)
 
 class ConverterWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Устанавливаем флаг для отображения в панели задач
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
+        
+        # Флаг для контроля показа главного окна при закрытии
+        self.show_main_on_close = True
+        
+        # Устанавливаем иконку
+        icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'assets', '749.ico'))
+        self.setWindowIcon(QIcon(icon_path))
+        
+        # Включаем поддержку перетаскивания
+        self.setAcceptDrops(True)
+        
         ensure_dirs_exist()
         self.translate, _ = get_translator()
         self.selected_files = []
@@ -104,7 +120,7 @@ class ConverterWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle('Конвертер аудио файлов')
+        self.setWindowTitle(self.translate('converter_window.title'))
         self.setMinimumWidth(600)
         self.setMinimumHeight(400)
 
@@ -113,21 +129,41 @@ class ConverterWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
 
-        # Создаем и добавляем элементы интерфейса
-        self.create_file_selection(layout)
-        self.create_files_list(layout)
-        self.create_format_selection(layout)
-        self.create_progress_section(layout)
-        self.create_convert_button(layout)
+        # Создаем рамку в ретро-стиле
+        main_frame = QFrame()
+        main_frame.setProperty('class', 'retro-border')
+        main_layout = QVBoxLayout(main_frame)
 
-        # Добавляем информацию о входной и выходной директориях
-        info_label = QLabel(f"Входная директория: {MUSIC_INPUT_DIR}\nВыходная директория: {MUSIC_OUTPUT_DIR}")
-        layout.addWidget(info_label)
+        # Добавляем декоративный LED-индикатор
+        led = QFrame()
+        led.setProperty('class', 'retro-led')
+        main_layout.addWidget(led)
+
+        # Добавляем "дисплей" для статуса
+        self.status_display = QLabel(self.translate('converter_window.status_ready'))
+        self.status_display.setProperty('class', 'retro-display')
+        self.status_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(self.status_display)
+
+        # Создаем и добавляем элементы интерфейса в рамку
+        self.create_file_selection(main_layout)
+        self.create_files_list(main_layout)
+        self.create_format_selection(main_layout)
+        self.create_progress_section(main_layout)
+        self.create_convert_button(main_layout)
+
+        # Добавляем информацию о директориях
+        info_label = QLabel(f"{self.translate('converter_window.input_dir')} {MUSIC_INPUT_DIR}\n{self.translate('converter_window.output_dir')} {MUSIC_OUTPUT_DIR}")
+        info_label.setProperty('class', 'retro-display')
+        main_layout.addWidget(info_label)
 
         # Добавляем кнопку перехода к сшиванию
-        switch_button = QPushButton('Перейти к сшиванию файлов')
+        switch_button = QPushButton(self.translate('converter_window.switch_to_merger'))
+        main_layout.addWidget(switch_button)
         switch_button.clicked.connect(self.switch_to_merger)
-        layout.addWidget(switch_button)
+
+        # Добавляем основную рамку в layout
+        layout.addWidget(main_frame)
 
         # Устанавливаем начальный размер конфетти
         self.confetti.setGeometry(0, 0, self.width(), self.height())
@@ -137,10 +173,10 @@ class ConverterWindow(QMainWindow):
     def create_file_selection(self, layout):
         file_layout = QHBoxLayout()
         
-        select_button = QPushButton('Выбрать файлы')
+        select_button = QPushButton(self.translate('converter_window.select_files'))
         select_button.clicked.connect(self.select_files)
         
-        clear_button = QPushButton('Очистить список')
+        clear_button = QPushButton(self.translate('converter_window.clear_list'))
         clear_button.clicked.connect(self.clear_files)
         
         file_layout.addWidget(select_button)
@@ -153,14 +189,14 @@ class ConverterWindow(QMainWindow):
         layout.addWidget(self.files_list)
 
         # Добавляем кнопку для удаления выбранных файлов
-        remove_button = QPushButton('Удалить выбранные')
+        remove_button = QPushButton(self.translate('converter_window.remove_selected'))
         remove_button.clicked.connect(self.remove_selected_files)
         layout.addWidget(remove_button)
 
     def create_format_selection(self, layout):
         format_layout = QHBoxLayout()
         
-        format_layout.addWidget(QLabel('Конвертировать в:'))
+        format_layout.addWidget(QLabel(self.translate('converter_window.convert_to')))
         self.format_combo = QComboBox()
         self.format_combo.addItems(SUPPORTED_FORMATS.keys())
         
@@ -176,7 +212,7 @@ class ConverterWindow(QMainWindow):
         layout.addWidget(self.status_label)
 
     def create_convert_button(self, layout):
-        self.convert_button = QPushButton('Конвертировать все')
+        self.convert_button = QPushButton(self.translate('converter_window.convert_button'))
         self.convert_button.clicked.connect(self.start_conversion)
         self.convert_button.setEnabled(False)
         layout.addWidget(self.convert_button)
@@ -184,7 +220,7 @@ class ConverterWindow(QMainWindow):
     def select_files(self):
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            'Выберите аудио файлы',
+            self.translate('converter_window.dialog.select_files_title'),
             MUSIC_INPUT_DIR,
             'Аудио файлы (*.mp3 *.wav *.ogg *.flac *.aac)'
         )
@@ -216,7 +252,8 @@ class ConverterWindow(QMainWindow):
     def start_conversion(self):
         self.worker = ConversionWorker(
             self.selected_files,
-            self.format_combo.currentText()
+            self.format_combo.currentText(),
+            self.translate
         )
         
         self.worker.progress.connect(self.update_progress)
@@ -233,7 +270,9 @@ class ConverterWindow(QMainWindow):
         self.progress_bar.setValue(int(current * 100 / total))
 
     def update_status(self, message):
+        """Обновляет статус в дисплее"""
         self.status_label.setText(message)
+        self.status_display.setText(message)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -257,8 +296,8 @@ class ConverterWindow(QMainWindow):
             # Небольшая задержка перед показом сообщения
             QTimer.singleShot(500, lambda: QMessageBox.information(
                 self,
-                'Успех',
-                'Конвертация всех файлов успешно завершена!'
+                self.translate('converter_window.dialog.success'),
+                self.translate('converter_window.dialog.conversion_complete')
             ))
             
             # Очищаем список после успешной конвертации
@@ -266,8 +305,8 @@ class ConverterWindow(QMainWindow):
         else:
             QMessageBox.critical(
                 self,
-                'Ошибка',
-                f'Произошла ошибка при конвертации:\n{error_message}'
+                self.translate('converter_window.dialog.error'),
+                f'{self.translate("converter_window.dialog.error_conversion")}\n{error_message}'
             )
 
     def closeEvent(self, event):
@@ -275,8 +314,8 @@ class ConverterWindow(QMainWindow):
         if self.worker and self.worker.isRunning():
             reply = QMessageBox.question(
                 self,
-                'Подтверждение',
-                'Конвертация в процессе. Вы уверены, что хотите выйти?',
+                self.translate('converter_window.dialog.confirmation'),
+                self.translate('converter_window.dialog.exit_confirmation'),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -289,20 +328,65 @@ class ConverterWindow(QMainWindow):
                 event.accept()
             else:
                 event.ignore()
-        else:
-            if self.parent and not self.merger:
-                self.parent.show()
-            event.accept()
+                return
+
+        # Показываем главное окно при закрытии только если установлен флаг
+        if self.show_main_on_close:
+            for widget in QApplication.topLevelWidgets():
+                if widget.__class__.__name__ == 'MainWindow':
+                    widget.show()
+                    break
+
+        event.accept()
 
     def switch_to_merger(self):
         """Переключение на окно сшивания"""
+        # Отключаем показ главного окна при закрытии
+        self.show_main_on_close = False
         # Импортируем здесь, чтобы избежать циклических импортов
         from src.gui.merger_window import MergerWindow
-        self.merger = MergerWindow(self.parent)
+
+        self.merger = MergerWindow(None)  # Убираем parent
+        
+        # Проверяем, нужно ли применить флаг "всегда поверх"
+        settings = load_settings()
+        if settings.get('always_on_top', False):
+            self.merger.setWindowFlags(self.merger.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
         self.merger.show()
-        if self.parent:
-            self.parent.show()
         self.close()
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """Обработчик начала перетаскивания файлов"""
+        if event.mimeData().hasUrls():
+            # Проверяем, что все файлы имеют поддерживаемые расширения
+            urls = event.mimeData().urls()
+            for url in urls:
+                file_path = url.toLocalFile()
+                ext = os.path.splitext(file_path)[1].lower()
+                if ext in ['.mp3', '.wav', '.ogg', '.flac', '.aac']:
+                    event.acceptProposedAction()
+                    return
+    
+    def dropEvent(self, event: QDropEvent):
+        """Обработчик сброса файлов в окно"""
+        urls = event.mimeData().urls()
+        files = []
+        for url in urls:
+            file_path = url.toLocalFile()
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in ['.mp3', '.wav', '.ogg', '.flac', '.aac']:
+                files.append(file_path)
+        
+        if files:
+            for file in files:
+                if file not in self.selected_files:
+                    self.selected_files.append(file)
+                    item = QListWidgetItem(os.path.basename(file))
+                    item.setToolTip(file)
+                    self.files_list.addItem(item)
+            
+            self.convert_button.setEnabled(bool(self.selected_files))
 
 def main():
     app = QApplication(sys.argv)

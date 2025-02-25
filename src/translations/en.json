@@ -1,0 +1,92 @@
+{
+  "main_window": {
+    "title": "KASETA - Formats change, magic remains",
+    "theme_label": "Interface theme:",
+    "themes": {
+      "default": "Default",
+      "retro": "Retro",
+      "win98": "Windows 98"
+    },
+    "always_on_top": "Always on top of other windows",
+    "converter_button": "Audio File Converter",
+    "merger_button": "Audio File Merger"
+  },
+  "merger_window": {
+    "title": "Audio File Merger",
+    "status_ready": "Ready to merge...",
+    "select_files": "Select Files",
+    "clear_list": "Clear List",
+    "files_list_label": "Selected files (drag to change order):",
+    "remove_selected": "Remove Selected",
+    "remove_minority": "Remove files of other format",
+    "move_up": "↑ Up",
+    "move_down": "↓ Down",
+    "output_format": "Output file format:",
+    "pause_duration": "Pause between tracks (sec):",
+    "fade_duration": "Fade duration (sec):",
+    "merge_button": "Merge Files",
+    "convert_button": "Convert to same format",
+    "switch_to_converter": "Go to File Converter",
+    "input_dir": "Input directory:",
+    "output_dir": "Output directory:",
+    "merge_tooltips": {
+      "disabled_different_formats": "Cannot merge files of different formats. Convert them to one format first.",
+      "disabled_not_enough_files": "Select at least two files to merge",
+      "enabled": "Merge selected files into one"
+    },
+    "dialog": {
+      "success": "Success",
+      "error": "Error",
+      "warning": "Warning",
+      "confirmation": "Confirmation",
+      "files_converted": "All files successfully converted to the same format!",
+      "files_merged": "Files successfully merged!",
+      "select_output_file": "Save merged file",
+      "error_conversion": "An error occurred during conversion:",
+      "error_merging": "An error occurred while merging files:",
+      "not_enough_files": "Select at least two files to merge",
+      "exit_confirmation": "Merging is in progress. Are you sure you want to exit?",
+      "preparing_files": "Preparing files for merging...",
+      "creating_temp_dir": "Creating temporary directory...",
+      "processing_file": "Processing file %1 of %2: %3",
+      "merging_files": "Merging audio files...",
+      "checking_result": "Checking result...",
+      "merge_complete": "Merging successfully completed!"
+    }
+  },
+  "converter_window": {
+    "title": "Audio File Converter",
+    "status_ready": "Ready to convert...",
+    "select_files": "Select Files",
+    "clear_list": "Clear List",
+    "remove_selected": "Remove Selected",
+    "convert_to": "Convert to:",
+    "convert_button": "Convert All",
+    "switch_to_merger": "Go to File Merger",
+    "input_dir": "Input directory:",
+    "output_dir": "Output directory:",
+    "dialog": {
+      "success": "Success",
+      "error": "Error",
+      "warning": "Warning",
+      "confirmation": "Confirmation",
+      "conversion_complete": "All files successfully converted!",
+      "error_conversion": "An error occurred during conversion:",
+      "error_conversion_file": "Error converting file %1:",
+      "exit_confirmation": "Conversion is in progress. Are you sure you want to exit?",
+      "converting_file": "Converting %1 of %2: %3",
+      "select_files_title": "Select audio files",
+      "permission_error": "Permission error",
+      "no_write_permissions": "No write permissions for directory: %1"
+    }
+  },
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "file_not_found": "File not found: %1",
+    "error_unexpected": "Unexpected error: %1",
+    "error": "Error"
+  }
+} 

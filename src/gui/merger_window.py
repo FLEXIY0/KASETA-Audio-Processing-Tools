@@ -4,9 +4,10 @@ from collections import Counter
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                            QLabel, QPushButton, QFileDialog, QListWidget,
                            QListWidgetItem, QSpinBox, QDoubleSpinBox,
-                           QProgressBar, QMessageBox, QComboBox)
+                           QProgressBar, QMessageBox, QComboBox, QApplication,
+                           QFrame)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QDragEnterEvent, QDropEvent, QIcon
 
 # Добавляем корневую директорию проекта в путь поиска модулей
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
@@ -16,6 +17,7 @@ from src.core.audio_processor import AudioProcessor
 from src.utils.translations import get_translator
 from src.utils.paths import MUSIC_INPUT_DIR, MUSIC_OUTPUT_DIR, ensure_dirs_exist
 from src.gui.confetti import ConfettiWidget
+from src.utils.settings import load_settings
 
 # Поддерживаемые форматы
 SUPPORTED_FORMATS = {
@@ -42,7 +44,47 @@ class MergeWorker(QThread):
 
     def run(self):
         try:
-            self.status.emit("Подготовка к объединению файлов...")
+            total_steps = 100
+            current_step = 0
+            
+            # Этап 1: Подготовка файлов (10%)
+            self.status.emit("Подготовка файлов к объединению...")
+            self.progress.emit(current_step, total_steps)
+            
+            # Создаем абсолютные пути
+            input_files = [os.path.abspath(os.path.normpath(f)) for f in self.input_files]
+            output_file = os.path.abspath(os.path.normpath(self.output_file))
+            
+            # Проверяем существование входных файлов
+            for file in input_files:
+                if not os.path.exists(file):
+                    raise FileNotFoundError(f"Файл не найден: {file}")
+            
+            # Этап 2: Создание временной директории (15%)
+            current_step = 15
+            self.status.emit("Создание временной директории...")
+            self.progress.emit(current_step, total_steps)
+            
+            temp_dir = os.path.abspath(os.path.join(os.path.dirname(output_file), ".temp_merge"))
+            if not os.path.exists(temp_dir):
+                os.makedirs(temp_dir)
+            
+            # Этап 3: Применение эффектов затухания (50%)
+            total_files = len(input_files)
+            for i, file in enumerate(input_files):
+                file_percent = 30 * (i + 1) / total_files
+                current_step = 15 + int(file_percent)
+                self.status.emit(f"Обработка файла {i+1} из {total_files}: {os.path.basename(file)}")
+                self.progress.emit(current_step, total_steps)
+                
+                # Пауза для наглядности обновления в интерфейсе
+                QThread.msleep(100)
+            
+            # Этап 4: Объединение файлов (70%)
+            current_step = 70
+            self.status.emit("Объединение аудио файлов...")
+            self.progress.emit(current_step, total_steps)
+            
             success = self.processor.merge_audio(
                 self.input_files,
                 self.output_file,
@@ -50,18 +92,47 @@ class MergeWorker(QThread):
                 fade_duration=self.fade_duration
             )
             
-            if success:
-                self.finished.emit(True, "")
-            else:
-                self.finished.emit(False, "Ошибка при объединении файлов")
+            # Этап 5: Финальная проверка (90%)
+            current_step = 90
+            self.status.emit("Проверка результата...")
+            self.progress.emit(current_step, total_steps)
+            
+            if not success:
+                raise Exception("Ошибка при объединении файлов")
                 
+            if not os.path.exists(output_file):
+                raise FileNotFoundError(f"Выходной файл не был создан: {output_file}")
+            
+            # Завершение (100%)
+            current_step = 100
+            self.status.emit("Объединение успешно завершено!")
+            self.progress.emit(current_step, total_steps)
+            
+            self.finished.emit(True, "")
+                
+        except FileNotFoundError as e:
+            self.finished.emit(False, str(e))
         except Exception as e:
             self.finished.emit(False, str(e))
 
 class MergerWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Устанавливаем флаг для отображения в панели задач
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
+        
+        # Флаг для контроля показа главного окна при закрытии
+        self.show_main_on_close = True
+        
+        # Устанавливаем иконку
+        icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'assets', '749.ico'))
+        self.setWindowIcon(QIcon(icon_path))
+        
+        # Включаем поддержку перетаскивания
+        self.setAcceptDrops(True)
+        
         ensure_dirs_exist()
+        # Получаем функцию перевода
         self.translate, _ = get_translator()
         self.selected_files = []
         self.parent = parent
@@ -76,7 +147,7 @@ class MergerWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle('Объединение аудио файлов')
+        self.setWindowTitle(self.translate('merger_window.title'))
         self.setMinimumWidth(600)
         self.setMinimumHeight(400)
 
@@ -84,22 +155,42 @@ class MergerWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
 
-        # Создаем все элементы интерфейса
-        self.create_file_selection(layout)
-        self.create_files_list(layout)
-        self.create_settings_section(layout)
-        self.create_progress_section(layout)
-        self.create_merge_button(layout)
-        self.create_convert_button(layout)  # Добавляем кнопку конвертации
+        # Создаем рамку в ретро-стиле
+        main_frame = QFrame()
+        main_frame.setProperty('class', 'retro-border')
+        main_layout = QVBoxLayout(main_frame)
+
+        # Добавляем декоративный LED-индикатор
+        led = QFrame()
+        led.setProperty('class', 'retro-led')
+        main_layout.addWidget(led)
+
+        # Добавляем "дисплей" для статуса
+        self.status_display = QLabel(self.translate('merger_window.status_ready'))
+        self.status_display.setProperty('class', 'retro-display')
+        self.status_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(self.status_display)
+
+        # Создаем все элементы интерфейса в рамке
+        self.create_file_selection(main_layout)
+        self.create_files_list(main_layout)
+        self.create_settings_section(main_layout)
+        self.create_progress_section(main_layout)
+        self.create_merge_button(main_layout)
+        self.create_convert_button(main_layout)
 
         # Информация о директориях
-        info_label = QLabel(f"Входная директория: {MUSIC_INPUT_DIR}\nВыходная директория: {MUSIC_OUTPUT_DIR}")
-        layout.addWidget(info_label)
+        info_label = QLabel(f"{self.translate('merger_window.input_dir')} {MUSIC_INPUT_DIR}\n{self.translate('merger_window.output_dir')} {MUSIC_OUTPUT_DIR}")
+        info_label.setProperty('class', 'retro-display')
+        main_layout.addWidget(info_label)
 
         # Добавляем кнопку перехода к конвертации
-        switch_button = QPushButton('Перейти к конвертации файлов')
+        switch_button = QPushButton(self.translate('merger_window.switch_to_converter'))
         switch_button.clicked.connect(self.switch_to_converter)
-        layout.addWidget(switch_button)
+        main_layout.addWidget(switch_button)
+
+        # Добавляем основную рамку в layout
+        layout.addWidget(main_frame)
 
         # Устанавливаем размер конфетти
         self.confetti.setGeometry(0, 0, self.width(), self.height())
@@ -109,10 +200,10 @@ class MergerWindow(QMainWindow):
     def create_file_selection(self, layout):
         file_layout = QHBoxLayout()
         
-        select_button = QPushButton('Выбрать файлы')
+        select_button = QPushButton(self.translate('merger_window.select_files'))
         select_button.clicked.connect(self.select_files)
         
-        clear_button = QPushButton('Очистить список')
+        clear_button = QPushButton(self.translate('merger_window.clear_list'))
         clear_button.clicked.connect(self.clear_files)
         
         file_layout.addWidget(select_button)
@@ -120,7 +211,7 @@ class MergerWindow(QMainWindow):
         layout.addLayout(file_layout)
 
     def create_files_list(self, layout):
-        list_label = QLabel("Выбранные файлы (перетащите для изменения порядка):")
+        list_label = QLabel(self.translate('merger_window.files_list_label'))
         layout.addWidget(list_label)
         
         self.files_list = QListWidget()
@@ -131,16 +222,16 @@ class MergerWindow(QMainWindow):
         # Кнопки управления списком
         buttons_layout = QHBoxLayout()
         
-        remove_button = QPushButton('Удалить выбранные')
+        remove_button = QPushButton(self.translate('merger_window.remove_selected'))
         remove_button.clicked.connect(self.remove_selected_files)
         
-        remove_minority_button = QPushButton('Удалить файлы другого формата')
+        remove_minority_button = QPushButton(self.translate('merger_window.remove_minority'))
         remove_minority_button.clicked.connect(self.remove_minority_files)
         
-        move_up_button = QPushButton('↑ Вверх')
+        move_up_button = QPushButton(self.translate('merger_window.move_up'))
         move_up_button.clicked.connect(self.move_files_up)
         
-        move_down_button = QPushButton('↓ Вниз')
+        move_down_button = QPushButton(self.translate('merger_window.move_down'))
         move_down_button.clicked.connect(self.move_files_down)
         
         buttons_layout.addWidget(remove_button)
@@ -154,16 +245,16 @@ class MergerWindow(QMainWindow):
         
         # Настройка формата
         format_layout = QVBoxLayout()
-        format_layout.addWidget(QLabel('Формат выходного файла:'))
+        format_layout.addWidget(QLabel(self.translate('merger_window.output_format')))
         self.format_combo = QComboBox()
         self.format_combo.addItems(SUPPORTED_FORMATS.keys())
-        self.format_combo.currentTextChanged.connect(self.on_format_changed)  # Добавляем обработчик
+        self.format_combo.currentTextChanged.connect(self.on_format_changed)
         format_layout.addWidget(self.format_combo)
         settings_layout.addLayout(format_layout)
         
         # Настройка паузы
         pause_layout = QVBoxLayout()
-        pause_layout.addWidget(QLabel('Пауза между треками (сек):'))
+        pause_layout.addWidget(QLabel(self.translate('merger_window.pause_duration')))
         self.pause_spin = QDoubleSpinBox()
         self.pause_spin.setRange(0, 10)
         self.pause_spin.setValue(2)
@@ -173,7 +264,7 @@ class MergerWindow(QMainWindow):
         
         # Настройка затухания
         fade_layout = QVBoxLayout()
-        fade_layout.addWidget(QLabel('Длительность затухания (сек):'))
+        fade_layout.addWidget(QLabel(self.translate('merger_window.fade_duration')))
         self.fade_spin = QDoubleSpinBox()
         self.fade_spin.setRange(0, 5)
         self.fade_spin.setValue(1)
@@ -192,14 +283,14 @@ class MergerWindow(QMainWindow):
         layout.addWidget(self.status_label)
 
     def create_merge_button(self, layout):
-        self.merge_button = QPushButton('Объединить файлы')
+        self.merge_button = QPushButton(self.translate('merger_window.merge_button'))
         self.merge_button.clicked.connect(self.start_merge)
         self.merge_button.setEnabled(False)
         layout.addWidget(self.merge_button)
 
     def create_convert_button(self, layout):
         """Создает кнопку для конвертации файлов в единый формат"""
-        self.convert_button = QPushButton('Конвертировать в единый формат')
+        self.convert_button = QPushButton(self.translate('merger_window.convert_button'))
         self.convert_button.clicked.connect(self.convert_to_main_format)
         self.convert_button.setEnabled(False)
         self.convert_button.hide()  # Изначально скрыта
@@ -255,6 +346,33 @@ class MergerWindow(QMainWindow):
         # Показываем/скрываем кнопку конвертации
         self.convert_button.setVisible(has_different_formats)
         self.convert_button.setEnabled(has_different_formats)
+        
+        # Обновляем состояние кнопки объединения
+        self.update_merge_button(has_different_formats)
+
+    def update_merge_button(self, has_different_formats=None):
+        """Обновляет состояние кнопки объединения в зависимости от количества файлов и их форматов"""
+        # Кнопка доступна, если файлов больше 1 и все они одного формата
+        files_count = len(self.selected_files)
+        
+        if files_count <= 1:
+            self.merge_button.setEnabled(False)
+            self.merge_button.setToolTip(self.translate('merger_window.merge_tooltips.disabled_not_enough_files'))
+            return
+        
+        # Если нам уже передали результат проверки форматов, используем его
+        if has_different_formats is None:
+            # Иначе проверяем, все ли файлы одного формата
+            first_format = self.get_file_format(self.selected_files[0])
+            has_different_formats = not all(self.get_file_format(file) == first_format for file in self.selected_files)
+        
+        # Кнопка активна только если форматы одинаковые
+        self.merge_button.setEnabled(not has_different_formats)
+        
+        if has_different_formats:
+            self.merge_button.setToolTip(self.translate('merger_window.merge_tooltips.disabled_different_formats'))
+        else:
+            self.merge_button.setToolTip(self.translate('merger_window.merge_tooltips.enabled'))
 
     def convert_to_main_format(self):
         """Конвертирует все файлы в основной формат"""
@@ -262,13 +380,15 @@ class MergerWindow(QMainWindow):
         if not main_format:
             return
 
-        # Создаем временную директорию с абсолютным путем
-        temp_dir = os.path.abspath(os.path.join(MUSIC_OUTPUT_DIR, ".temp"))
+        # Создаем директорию для конвертированных файлов с абсолютным путем
+        converted_dir = os.path.abspath(os.path.join(MUSIC_OUTPUT_DIR, "converted_files"))
         try:
-            os.makedirs(temp_dir, exist_ok=True)
-            print(f"Создана временная директория: {temp_dir}")  # Отладочный вывод
+            os.makedirs(converted_dir, exist_ok=True)
+            print(f"Создана директория для конвертации: {converted_dir}")  # Отладочный вывод
         except Exception as e:
-            QMessageBox.critical(self, 'Ошибка', f'Не удалось создать временную директорию:\n{str(e)}')
+            QMessageBox.critical(self, 
+                self.translate('merger_window.dialog.error'), 
+                f"{self.translate('merger_window.dialog.error_conversion')}\n{str(e)}")
             return
 
         # Показываем прогресс бар
@@ -279,23 +399,46 @@ class MergerWindow(QMainWindow):
         total_files = self.files_list.count()
         converted_count = 0
         converted_files = []  # Список для хранения успешно конвертированных файлов
-        old_temp_files = []  # Список для хранения старых временных файлов
+        
+        # Начальные значения для progressbar
+        total_progress = total_files * 2  # Первый проход - анализ файлов, второй - конвертация
+        current_progress = 0
 
         try:
-            # Конвертируем файлы
+            # Анализ файлов - первый проход
+            files_to_convert = []
             for i in range(total_files):
                 item = self.files_list.item(i)
                 file_path = item.toolTip()
                 file_format = self.get_file_format(file_path)
                 
+                # Обновляем UI
+                self.status_label.setText(f"{self.translate('merger_window.dialog.processing_file', i+1, total_files, os.path.basename(file_path))}")
+                current_progress += 1
+                self.progress_bar.setValue(int(current_progress * 100 / total_progress))
+                QApplication.processEvents()  # Позволяет UI обновиться
+                
+                # Если формат отличается от целевого, добавляем в список для конвертации
                 if file_format != main_format:
+                    files_to_convert.append((i, file_path))
+                else:
+                    # Для файлов правильного формата сразу добавляем в список
+                    converted_files.append((i, file_path, os.path.basename(file_path)))
+            
+            # Конвертация файлов - второй проход
+            if files_to_convert:
+                self.status_label.setText(f"Найдено {len(files_to_convert)} файлов для конвертации")
+                QApplication.processEvents()
+                
+                for idx, (i, file_path) in enumerate(files_to_convert):
                     # Обновляем статус
-                    self.status_label.setText(f'Конвертация файла {os.path.basename(file_path)}...')
+                    filename = os.path.basename(file_path)
+                    self.status_label.setText(f"{self.translate('merger_window.dialog.processing_file', idx+1, len(files_to_convert), filename)}")
+                    self.status_display.setText(f"{self.translate('merger_window.dialog.processing_file', idx+1, len(files_to_convert), filename)}")
                     
                     # Создаем новое имя файла с абсолютным путем
-                    new_basename = os.path.splitext(os.path.basename(file_path))[0] + SUPPORTED_FORMATS[main_format]['ext']
-                    new_file = os.path.abspath(os.path.join(temp_dir, new_basename))
-                    print(f"Попытка сохранить в: {new_file}")  # Отладочный вывод
+                    new_basename = os.path.splitext(filename)[0] + SUPPORTED_FORMATS[main_format]['ext']
+                    new_file = os.path.abspath(os.path.join(converted_dir, new_basename))
                     
                     # Конвертируем файл
                     processor = AudioProcessor(lambda x: x)
@@ -306,21 +449,27 @@ class MergerWindow(QMainWindow):
                     )
                     
                     # Проверяем результат конвертации и существование файла
-                    if success:
-                        if os.path.exists(new_file):
-                            print(f"Файл успешно создан: {new_file}")  # Отладочный вывод
-                            converted_files.append((i, new_file, new_basename))
-                            converted_count += 1
-                            self.progress_bar.setValue(int(converted_count * 100 / total_files))
-                        else:
-                            raise Exception(f"Файл не был создан: {new_file}")
+                    if success and os.path.exists(new_file):
+                        converted_files.append((i, new_file, new_basename))
+                        converted_count += 1
                     else:
-                        raise Exception(error if error else "Неизвестная ошибка конвертации")
-                else:
-                    # Для файлов правильного формата просто добавляем их в список
-                    converted_files.append((i, file_path, os.path.basename(file_path)))
+                        error_msg = error if error else f"{self.translate('common.file_not_found', new_file)}"
+                        raise Exception(error_msg)
+                    
+                    # Обновляем прогресс
+                    current_progress += 1
+                    self.progress_bar.setValue(int(current_progress * 100 / total_progress))
+                    QApplication.processEvents()
+            else:
+                self.status_label.setText('Все файлы уже в нужном формате')
+                QApplication.processEvents()
+                # Завершаем прогресс-бар, так как конвертация не нужна
+                self.progress_bar.setValue(100)
 
             # Обновляем пути в списке только после успешной конвертации всех файлов
+            self.status_label.setText(f"{self.translate('merger_window.dialog.checking_result')}")
+            QApplication.processEvents()
+            
             for i, new_file, new_basename in converted_files:
                 if os.path.exists(new_file):  # Дополнительная проверка
                     self.selected_files[i] = new_file
@@ -329,39 +478,33 @@ class MergerWindow(QMainWindow):
                     item.setText(new_basename)
                     item.setBackground(QColor(255, 255, 255))
                 else:
-                    raise Exception(f"Файл не найден после конвертации: {new_file}")
-
-            # Очищаем старые временные файлы только после успешной конвертации
-            if os.path.exists(temp_dir):
-                for file in os.listdir(temp_dir):
-                    file_path = os.path.join(temp_dir, file)
-                    if file_path not in [f[1] for f in converted_files]:  # Не удаляем только что сконвертированные файлы
-                        try:
-                            os.remove(file_path)
-                            print(f"Удален старый временный файл: {file_path}")  # Отладочный вывод
-                        except:
-                            pass
+                    raise Exception(f"{self.translate('common.file_not_found', new_file)}")
 
             # Скрываем прогресс
             self.progress_bar.hide()
             self.status_label.clear()
+            self.status_display.setText(self.translate('merger_window.status_ready'))
             
             # Скрываем кнопку конвертации
             self.convert_button.hide()
             
+            # Обновляем состояние кнопки объединения - теперь все файлы одного формата
+            self.update_merge_button(False)
+            
             QMessageBox.information(
                 self,
-                'Успех',
-                'Все файлы успешно конвертированы в единый формат!'
+                self.translate('merger_window.dialog.success'),
+                self.translate('merger_window.dialog.files_converted')
             )
 
         except Exception as e:
             self.progress_bar.hide()
             self.status_label.clear()
+            self.status_display.setText(self.translate('merger_window.status_ready'))
             QMessageBox.critical(
                 self,
-                'Ошибка',
-                f'Произошла ошибка при конвертации:\n{str(e)}'
+                self.translate('merger_window.dialog.error'),
+                f"{self.translate('merger_window.dialog.error_conversion')}\n{str(e)}"
             )
             self.convert_button.setEnabled(True)
 
@@ -381,8 +524,8 @@ class MergerWindow(QMainWindow):
                     item.setToolTip(file)
                     self.files_list.addItem(item)
             
-            self.merge_button.setEnabled(len(self.selected_files) > 1)
-            self.update_file_colors()  # Обновляем цвета после добавления файлов
+            # Обновляем цвета и состояние кнопок
+            self.update_file_colors()  # Это также вызовет update_merge_button
 
     def clear_files(self):
         self.selected_files.clear()
@@ -397,8 +540,8 @@ class MergerWindow(QMainWindow):
             self.selected_files.remove(file_path)
             self.files_list.takeItem(self.files_list.row(item))
         
-        self.merge_button.setEnabled(len(self.selected_files) > 1)
-        self.update_file_colors()  # Обновляем цвета после удаления
+        # Обновляем цвета и состояние кнопок
+        self.update_file_colors()  # Это также вызовет update_merge_button
 
     def move_files_up(self):
         current_row = self.files_list.currentRow()
@@ -409,7 +552,7 @@ class MergerWindow(QMainWindow):
             # Обновляем порядок в selected_files
             file_path = self.selected_files.pop(current_row)
             self.selected_files.insert(current_row - 1, file_path)
-            self.update_file_colors()  # Обновляем цвета после перемещения
+            self.update_file_colors()  # Добавляем обновление цветов и состояния кнопок
 
     def move_files_down(self):
         current_row = self.files_list.currentRow()
@@ -420,7 +563,7 @@ class MergerWindow(QMainWindow):
             # Обновляем порядок в selected_files
             file_path = self.selected_files.pop(current_row)
             self.selected_files.insert(current_row + 1, file_path)
-            self.update_file_colors()  # Обновляем цвета после перемещения
+            self.update_file_colors()  # Добавляем обновление цветов и состояния кнопок
 
     def start_merge(self):
         if len(self.selected_files) < 2:
@@ -466,7 +609,9 @@ class MergerWindow(QMainWindow):
         self.progress_bar.setValue(int(current * 100 / total))
 
     def update_status(self, message):
+        """Обновляет статус в дисплее"""
         self.status_label.setText(message)
+        self.status_display.setText(message)
 
     def merge_finished(self, success, error_message=""):
         self.progress_bar.setVisible(False)
@@ -516,19 +661,32 @@ class MergerWindow(QMainWindow):
                 event.accept()
             else:
                 event.ignore()
-        else:
-            if self.parent and not hasattr(self, 'converter'):
-                self.parent.show()
-            event.accept()
+                return
+
+        # Показываем главное окно при закрытии только если установлен флаг
+        if self.show_main_on_close:
+            for widget in QApplication.topLevelWidgets():
+                if widget.__class__.__name__ == 'MainWindow':
+                    widget.show()
+                    break
+
+        event.accept()
 
     def switch_to_converter(self):
         """Переключение на окно конвертации"""
+        # Отключаем показ главного окна при закрытии
+        self.show_main_on_close = False
         # Импортируем здесь, чтобы избежать циклических импортов
         from src.gui.converter_window import ConverterWindow
-        self.converter = ConverterWindow(self.parent)
+
+        self.converter = ConverterWindow(None)  # Убираем parent
+        
+        # Проверяем, нужно ли применить флаг "всегда поверх"
+        settings = load_settings()
+        if settings.get('always_on_top', False):
+            self.converter.setWindowFlags(self.converter.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
         self.converter.show()
-        if self.parent:
-            self.parent.show()
         self.close()
 
     def remove_minority_files(self):
@@ -558,8 +716,40 @@ class MergerWindow(QMainWindow):
             self.files_list.takeItem(index)
 
         # Обновляем состояние кнопок
-        self.merge_button.setEnabled(len(self.selected_files) > 1)
-        self.convert_button.hide()
+        self.update_file_colors()  # Это также вызовет update_merge_button
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """Обработчик начала перетаскивания файлов"""
+        if event.mimeData().hasUrls():
+            # Проверяем, что все файлы имеют поддерживаемые расширения
+            urls = event.mimeData().urls()
+            for url in urls:
+                file_path = url.toLocalFile()
+                ext = os.path.splitext(file_path)[1].lower()
+                if ext in ['.mp3', '.wav', '.ogg', '.flac', '.aac']:
+                    event.acceptProposedAction()
+                    return
+    
+    def dropEvent(self, event: QDropEvent):
+        """Обработчик сброса файлов в окно"""
+        urls = event.mimeData().urls()
+        files = []
+        for url in urls:
+            file_path = url.toLocalFile()
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in ['.mp3', '.wav', '.ogg', '.flac', '.aac']:
+                files.append(file_path)
+        
+        if files:
+            for file in files:
+                if file not in self.selected_files:
+                    self.selected_files.append(file)
+                    item = QListWidgetItem(os.path.basename(file))
+                    item.setToolTip(file)
+                    self.files_list.addItem(item)
+            
+            # Обновляем цвета и состояние кнопок
+            self.update_file_colors()  # Это также вызовет update_merge_button
 
 def main():
     app = QApplication(sys.argv)
